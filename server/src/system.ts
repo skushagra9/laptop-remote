@@ -19,6 +19,7 @@ export type Battery = {
 
 export type MacState = Battery & {
   chargingInhibited: boolean | null;
+  adapterDisabled: boolean | null;
   chargingBackend: string;
   lidSleepPrevented: boolean;
   stayAwake: boolean;
@@ -45,9 +46,15 @@ export function parseSleepDisabled(pmset: string): boolean {
   return /^\s*SleepDisabled\s+1\s*$/m.test(pmset);
 }
 
-export function parseHelperStatus(json: string): { backend: string; chargingInhibited: boolean | null } {
-  const parsed = JSON.parse(json) as { backend: string; chargingInhibited: boolean | null };
-  return { backend: parsed.backend, chargingInhibited: parsed.chargingInhibited };
+type HelperStatus = { backend: string; chargingInhibited: boolean | null; adapterDisabled: boolean | null };
+
+export function parseHelperStatus(json: string): HelperStatus {
+  const parsed = JSON.parse(json) as Partial<HelperStatus>;
+  return {
+    backend: parsed.backend ?? "none",
+    chargingInhibited: parsed.chargingInhibited ?? null,
+    adapterDisabled: parsed.adapterDisabled ?? null,
+  };
 }
 
 export async function readBattery(): Promise<Battery> {
@@ -90,6 +97,10 @@ export async function setCharging(enabled: boolean): Promise<void> {
   await helperAsRoot(["charging", enabled ? "on" : "off"]);
 }
 
+export async function setAdapter(enabled: boolean): Promise<void> {
+  await helperAsRoot(["adapter", enabled ? "on" : "off"]);
+}
+
 export async function setLidSleepPrevented(prevent: boolean): Promise<void> {
   await helperAsRoot(["lid-sleep", prevent ? "prevent" : "allow"]);
 }
@@ -126,6 +137,7 @@ export async function readMacState(stayAwake: StayAwake): Promise<MacState> {
   return {
     ...battery,
     chargingInhibited: helper.chargingInhibited,
+    adapterDisabled: helper.adapterDisabled,
     chargingBackend: helper.backend,
     lidSleepPrevented,
     stayAwake: stayAwake.active,

@@ -6,6 +6,7 @@
 //
 //   status                     print JSON with the charging switch state
 //   charging on|off            allow or inhibit battery charging
+//   adapter on|off             use the charger, or run from battery while plugged in
 //   lid-sleep allow|prevent    let the Mac sleep, or keep it awake with the lid closed
 //
 // Charging is controlled through the SMC. Current Apple Silicon firmware
@@ -148,7 +149,7 @@ static int charging_inhibited(Backend b) {
   return -1;
 }
 
-static int set_charging(Backend b, int enable) {
+static int write_charging_key(Backend b, int enable) {
   if (b == BACKEND_CHTE) {
     unsigned char v[4] = {enable ? 0x00 : 0x01, 0, 0, 0};
     return smc_write("CHTE", v, 4);
@@ -159,6 +160,53 @@ static int set_charging(Backend b, int enable) {
     return smc_write("CH0C", &v, 1);
   }
   return -1;
+}
+
+// The firmware leaves the MagSafe LED amber ("charging") when charging is
+// inhibited through the SMC, so set it green while paused and hand it back
+// to the system (0x00) on resume. Macs without MagSafe have no ACLC key.
+#define ACLC_SYSTEM 0x00
+#define ACLC_GREEN 0x03
+
+static void sync_magsafe_led(int enable) {
+  if (!key_exists("ACLC")) return;
+  unsigned char v = enable ? ACLC_SYSTEM : ACLC_GREEN;
+  smc_write("ACLC", &v, 1);
+}
+
+static int set_charging(Backend b, int enable) {
+  if (write_charging_key(b, enable) != 0) return -1;
+  sync_magsafe_led(enable);
+  return 0;
+}
+
+// Disconnecting the adapter makes the Mac run from its battery while the
+// charger stays plugged in. Current firmware uses CHIE (0x08 = disconnected);
+// older firmware uses CH0I (0x01 = disconnected).
+static const char *adapter_key(void) {
+  if (key_exists("CHIE")) return "CHIE";
+  if (key_exists("CH0I")) return "CH0I";
+  return NULL;
+}
+
+// Returns 1 when the adapter is disconnected, 0 when connected, -1 when unknown.
+static int adapter_disabled(void) {
+  const char *key = adapter_key();
+  unsigned char bytes[32];
+  UInt32 size;
+  if (!key || smc_read(key, bytes, &size) != 0 || size < 1) return -1;
+  return bytes[0] != 0;
+}
+
+static int set_adapter(int enable) {
+  const char *key = adapter_key();
+  if (!key) return -1;
+  unsigned char v = enable ? 0x00 : (strcmp(key, "CHIE") == 0 ? 0x08 : 0x01);
+  return smc_write(key, &v, 1);
+}
+
+static const char *json_bool(int value) {
+  return value < 0 ? "null" : (value ? "true" : "false");
 }
 
 static int run_pmset_disablesleep(int disable) {
@@ -176,7 +224,7 @@ static int run_pmset_disablesleep(int disable) {
 }
 
 static int usage(void) {
-  fprintf(stderr, "usage: laptop-remote-helper status | charging on|off | lid-sleep allow|prevent\n");
+  fprintf(stderr, "usage: laptop-remote-helper status | charging on|off | adapter on|off | lid-sleep allow|prevent\n");
   return 2;
 }
 
@@ -203,9 +251,17 @@ int main(int argc, char **argv) {
   int rc = 0;
 
   if (strcmp(argv[1], "status") == 0 && argc == 2) {
-    int inhibited = charging_inhibited(b);
-    printf("{\"backend\":\"%s\",\"chargingInhibited\":%s}\n", backend_name(b),
-           inhibited < 0 ? "null" : (inhibited ? "true" : "false"));
+    printf("{\"backend\":\"%s\",\"chargingInhibited\":%s,\"adapterDisabled\":%s}\n", backend_name(b),
+           json_bool(charging_inhibited(b)), json_bool(adapter_disabled()));
+  } else if (strcmp(argv[1], "adapter") == 0 && argc == 3) {
+    int enable;
+    if (strcmp(argv[2], "on") == 0) enable = 1;
+    else if (strcmp(argv[2], "off") == 0) enable = 0;
+    else rc = usage();
+    if (rc == 0 && set_adapter(enable) != 0) {
+      fprintf(stderr, "could not switch the adapter (unsupported Mac, or not root)\n");
+      rc = 1;
+    }
   } else if (strcmp(argv[1], "charging") == 0 && argc == 3) {
     int enable;
     if (strcmp(argv[2], "on") == 0) enable = 1;

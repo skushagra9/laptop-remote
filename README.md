@@ -4,6 +4,7 @@ Control your Mac's charging and sleep from your phone, from anywhere.
 
 Leave the laptop plugged in at home, then from your phone:
 
+- **Cut charger power.** The Mac runs on its battery even though the charger is plugged in.
 - **Pause or resume charging.** With charging paused the Mac keeps running from the charger, and the battery just stops filling up.
 - **Keep it awake** so your Claude Code Remote Control sessions (or anything else) stay reachable.
 - **Keep it awake with the lid closed.**
@@ -19,17 +20,19 @@ phone (web app) --HTTPS--> tailscale serve --> server (127.0.0.1:7777) --sudo-->
 ```
 
 - `helper/laptop-remote-helper.c` is the only code that runs as root.
-  It accepts a fixed list of commands (`status`, `charging on|off`, `lid-sleep allow|prevent`) and never an arbitrary SMC key or value.
-  It switches charging with the `CHTE` SMC key on current Apple Silicon firmware, or `CH0B`/`CH0C` on older firmware.
+  It accepts a fixed list of commands (`status`, `charging on|off`, `adapter on|off`, `lid-sleep allow|prevent`) and never an arbitrary SMC key or value.
+  It switches charging with the `CHTE` SMC key (`CH0B`/`CH0C` on older firmware) and charger power with `CHIE` (`CH0I` on older firmware).
+  While charging is paused it also turns the MagSafe light green through `ACLC`, because the firmware leaves it amber.
 - `server/` is a dependency-free Node.js server that serves the phone UI and a small JSON API protected by a token.
   It only listens on `127.0.0.1`, so it is reachable only through Tailscale.
 - `install.sh` installs the helper with a sudo rule scoped to it, starts the server at login with launchd, and exposes it with `tailscale serve`.
 
 ## Safety rules
 
-- Charging turns back on by itself when the battery drops to the floor (20% by default).
+- Charging and charger power never change by themselves, not even when the battery runs flat, or when the server stops.
+  If you cut charger power and the battery reaches 0%, the Mac shuts down and can't be reached until someone plugs in and powers it on.
 - Closed-lid awake turns off by itself when the charger is unplugged, since a closed, non-sleeping laptop off the charger is probably in a bag.
-- When the server stops for any reason it turns charging back on and allows sleep again.
+- When the server stops for any reason it allows sleep again.
   The keep-awake process is tied to the server's PID, so it can't outlive a crash.
 
 ## Install
@@ -42,7 +45,7 @@ You need macOS on Apple Silicon, Node.js 24 or newer, and the Xcode command line
    It asks for your password once, then prints a link.
 3. Open the link on your phone and use **Share > Add to Home Screen**.
 
-Change the floor or the port in `~/.config/laptop-remote/config.json`, then restart with `launchctl kickstart -k gui/$(id -u)/io.github.laptop-remote`.
+Change the port in `~/.config/laptop-remote/config.json`, then restart with `launchctl kickstart -k gui/$(id -u)/io.github.laptop-remote`.
 
 To remove everything, run `./uninstall.sh`.
 

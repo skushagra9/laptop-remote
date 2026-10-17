@@ -9,33 +9,29 @@ const base: MacState = {
   charging: false,
   fullyCharged: false,
   chargingInhibited: false,
+  adapterDisabled: false,
   chargingBackend: "CHTE",
   lidSleepPrevented: false,
   stayAwake: false,
 };
 
 test("does nothing in a normal state", () => {
-  assert.deepEqual(safetyActions(base, 20), []);
+  assert.deepEqual(safetyActions(base), []);
 });
 
-test("keeps charging paused above the floor", () => {
-  assert.deepEqual(safetyActions({ ...base, chargingInhibited: true, percent: 21 }, 20), []);
+test("never turns charging or charger power back on, even at 1%", () => {
+  assert.deepEqual(safetyActions({ ...base, percent: 1, chargingInhibited: true, adapterDisabled: true }), []);
 });
 
-test("turns charging back on at the floor", () => {
-  const actions = safetyActions({ ...base, chargingInhibited: true, percent: 20 }, 20);
-  assert.deepEqual(actions.map((a) => a.kind), ["enable-charging"]);
-});
-
-test("does not touch charging when its state is unknown", () => {
-  assert.deepEqual(safetyActions({ ...base, chargingInhibited: null, percent: 5 }, 20), []);
-});
-
-test("allows lid sleep again once the charger is unplugged", () => {
-  const actions = safetyActions({ ...base, lidSleepPrevented: true, pluggedIn: false }, 20);
+test("allows lid sleep again once the charger is physically unplugged", () => {
+  const actions = safetyActions({ ...base, lidSleepPrevented: true, pluggedIn: false });
   assert.deepEqual(actions.map((a) => a.kind), ["allow-lid-sleep"]);
 });
 
+test("keeps the lid awake while charger power is cut from the app", () => {
+  assert.deepEqual(safetyActions({ ...base, lidSleepPrevented: true, pluggedIn: false, adapterDisabled: true }), []);
+});
+
 test("keeps the lid awake while plugged in", () => {
-  assert.deepEqual(safetyActions({ ...base, lidSleepPrevented: true }, 20), []);
+  assert.deepEqual(safetyActions({ ...base, lidSleepPrevented: true }), []);
 });

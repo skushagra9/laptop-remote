@@ -5,7 +5,14 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "./config.ts";
 import { safetyActions } from "./policy.ts";
-import { readComputerName, readMacState, setCharging, setLidSleepPrevented, StayAwake } from "./system.ts";
+import {
+  readComputerName,
+  readMacState,
+  setAdapter,
+  setCharging,
+  setLidSleepPrevented,
+  StayAwake,
+} from "./system.ts";
 
 const POLL_MS = 30_000;
 const MAX_EVENTS = 30;
@@ -64,13 +71,12 @@ function requireBoolean(body: Record<string, unknown>, key: string): boolean {
 
 async function status() {
   const state = await readMacState(stayAwake);
-  return { host: computerName, floorPercent: config.floorPercent, state, events };
+  return { host: computerName, state, events };
 }
 
 async function enforceSafety(): Promise<void> {
   const state = await readMacState(stayAwake);
-  for (const action of safetyActions(state, config.floorPercent)) {
-    if (action.kind === "enable-charging") await setCharging(true);
+  for (const action of safetyActions(state)) {
     if (action.kind === "allow-lid-sleep") await setLidSleepPrevented(false);
     log(action.reason);
   }
@@ -81,6 +87,11 @@ const actions: Record<string, (body: Record<string, unknown>) => Promise<void>> 
     const enabled = requireBoolean(body, "enabled");
     await setCharging(enabled);
     log(enabled ? "Charging turned on" : "Charging paused");
+  },
+  "/api/adapter": async (body) => {
+    const enabled = requireBoolean(body, "enabled");
+    await setAdapter(enabled);
+    log(enabled ? "Charger power turned on" : "Charger power cut, running on battery");
   },
   "/api/stay-awake": async (body) => {
     const enabled = requireBoolean(body, "enabled");
@@ -120,12 +131,13 @@ const server = createServer(async (req, res) => {
   }
 });
 
-// Leave the Mac in its normal state whenever the server stops, so a stopped
-// server can never strand a laptop that is not charging.
+// Charging and charger power are left exactly as the user set them: they only
+// change when the user says so. Lid sleep is restored because the bag-safety
+// rule that guards it stops running with the server.
 async function shutdown(signal: string): Promise<void> {
-  console.log(`${signal} received, restoring charging and lid sleep`);
+  console.log(`${signal} received, allowing lid sleep again`);
   stayAwake.set(false);
-  await Promise.allSettled([setCharging(true), setLidSleepPrevented(false)]);
+  await setLidSleepPrevented(false).catch(() => {});
   process.exit(0);
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));

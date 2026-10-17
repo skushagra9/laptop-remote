@@ -38,9 +38,18 @@ test("parseSleepDisabled detects pmset disablesleep", () => {
   assert.equal(parseSleepDisabled(" sleep                1\n"), false);
 });
 
-test("parseHelperStatus passes through an unknown charging state", () => {
+test("parseHelperStatus reads both power switches", () => {
+  assert.deepEqual(parseHelperStatus('{"backend":"CHTE","chargingInhibited":true,"adapterDisabled":false}\n'), {
+    backend: "CHTE",
+    chargingInhibited: true,
+    adapterDisabled: false,
+  });
+});
+
+test("parseHelperStatus treats fields an older helper omits as unknown", () => {
   assert.deepEqual(parseHelperStatus('{"backend":"none","chargingInhibited":null}\n'), {
     backend: "none",
     chargingInhibited: null,
+    adapterDisabled: null,
   });
 });

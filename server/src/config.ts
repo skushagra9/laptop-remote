@@ -6,13 +6,12 @@ import { join } from "node:path";
 export type Config = {
   port: number;
   token: string;
-  floorPercent: number;
 };
 
 export const CONFIG_DIR = join(homedir(), ".config", "laptop-remote");
 const CONFIG_PATH = join(CONFIG_DIR, "config.json");
 
-const DEFAULTS = { port: 7777, floorPercent: 20 };
+const DEFAULTS = { port: 7777 };
 
 // Creates the config with a fresh random token on first run.
 export function loadConfig(): Config {
@@ -24,7 +23,6 @@ export function loadConfig(): Config {
   }
   const config: Config = {
     port: stored.port ?? DEFAULTS.port,
-    floorPercent: stored.floorPercent ?? DEFAULTS.floorPercent,
     token: stored.token ?? randomBytes(24).toString("base64url"),
   };
   if (!stored.token) {

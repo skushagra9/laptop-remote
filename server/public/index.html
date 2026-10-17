@@ -155,8 +155,15 @@
     <section class="card">
       <div class="row">
         <div>
+          <strong>Use charger power</strong>
+          <span id="adapter-hint">Off runs the Mac on battery while plugged in</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="adapter" aria-label="Use charger power"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div>
           <strong>Charging</strong>
-          <span id="charging-hint">Allow the battery to charge</span>
+          <span id="charging-hint">Off stops the battery filling up</span>
         </div>
         <label class="switch"><input type="checkbox" id="charging" aria-label="Charging"><span class="track"></span></label>
       </div>
@@ -189,6 +196,7 @@
 
 <script>
   const TOKEN_KEY = "laptop-remote-token";
+  const LOW_PERCENT = 15;
   const $ = (id) => document.getElementById(id);
 
   function readStoredToken() {
@@ -235,6 +243,11 @@
   }
 
   function describePower(s) {
+    if (s.adapterDisabled) {
+      return ["Running on battery", s.percent <= LOW_PERCENT
+        ? "Battery is low. The Mac shuts down at 0% unless you turn charger power on"
+        : "Charger power is off until you turn it back on"];
+    }
     if (!s.pluggedIn) return ["On battery", "Charger not connected"];
     if (s.chargingInhibited) return ["Charging paused", "Running on the charger, battery is not charging"];
     if (s.fullyCharged) return ["Fully charged", "Running on the charger"];
@@ -246,6 +259,13 @@
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
+  // Both power switches stay exactly as set; nothing turns them back on.
+  function setSwitch(id, checked, unsupported, hint) {
+    $(id).checked = checked;
+    $(id).disabled = unsupported;
+    $(`${id}-hint`).textContent = unsupported ? "Not supported on this Mac" : hint;
+  }
+
   function render(data) {
     const s = data.state;
     $("login").hidden = true;
@@ -254,18 +274,17 @@
     $("pct").textContent = `${s.percent}%`;
     const fill = $("gauge-fill");
     fill.style.strokeDashoffset = String(226.2 * (1 - s.percent / 100));
-    fill.style.stroke = s.percent <= data.floorPercent ? "var(--danger)" : s.chargingInhibited ? "var(--warn)" : "var(--accent)";
+    fill.style.stroke = s.percent <= LOW_PERCENT ? "var(--danger)"
+      : s.adapterDisabled || s.chargingInhibited ? "var(--warn)" : "var(--accent)";
 
     const [title, detail] = describePower(s);
     $("power-title").textContent = title;
     $("power-detail").textContent = detail;
 
-    const unsupported = s.chargingInhibited === null;
-    $("charging").checked = !s.chargingInhibited;
-    $("charging").disabled = unsupported;
-    $("charging-hint").textContent = unsupported
-      ? "This Mac does not expose a charging switch"
-      : `Turns back on by itself at ${data.floorPercent}%`;
+    setSwitch("adapter", !s.adapterDisabled, s.adapterDisabled === null,
+      "Off runs the Mac on battery while plugged in");
+    setSwitch("charging", !s.chargingInhibited, s.chargingInhibited === null,
+      "Off stops the battery filling up");
     $("stay-awake").checked = s.stayAwake;
     $("lid").checked = s.lidSleepPrevented;
 
@@ -306,6 +325,7 @@
       }
     });
   }
+  bindSwitch("adapter", "/api/adapter", (on) => ({ enabled: on }));
   bindSwitch("charging", "/api/charging", (on) => ({ enabled: on }));
   bindSwitch("stay-awake", "/api/stay-awake", (on) => ({ enabled: on }));
   bindSwitch("lid", "/api/lid-sleep", (on) => ({ prevent: on }));
