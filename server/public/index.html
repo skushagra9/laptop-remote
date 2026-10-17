@@ -155,17 +155,27 @@
     <section class="card">
       <div class="row">
         <div>
-          <strong>Use charger power</strong>
-          <span id="adapter-hint">Off runs the Mac on battery while plugged in</span>
+          <strong>Normal Mac behavior</strong>
+          <span id="normal-hint">Turn on to switch everything below off</span>
         </div>
-        <label class="switch"><input type="checkbox" id="adapter" aria-label="Use charger power"><span class="track"></span></label>
+        <label class="switch"><input type="checkbox" id="normal" aria-label="Normal Mac behavior"><span class="track"></span></label>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <strong>Cut charger power</strong>
+          <span id="adapter-hint">Run on battery even while plugged in</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="adapter" aria-label="Cut charger power"><span class="track"></span></label>
       </div>
       <div class="row">
         <div>
-          <strong>Charging</strong>
-          <span id="charging-hint">Off stops the battery filling up</span>
+          <strong>Pause charging</strong>
+          <span id="charging-hint">Run on the charger, but stop filling the battery</span>
         </div>
-        <label class="switch"><input type="checkbox" id="charging" aria-label="Charging"><span class="track"></span></label>
+        <label class="switch"><input type="checkbox" id="charging" aria-label="Pause charging"><span class="track"></span></label>
       </div>
       <div class="row">
         <div>
@@ -248,6 +258,7 @@
         ? "Battery is low. The Mac shuts down at 0% unless you turn charger power on"
         : "Charger power is off until you turn it back on"];
     }
+    if (s.chargerReconnecting) return ["Reconnecting to the charger", "This can take a minute or two after charger power comes back"];
     if (!s.pluggedIn) return ["On battery", "Charger not connected"];
     if (s.chargingInhibited) return ["Charging paused", "Running on the charger, battery is not charging"];
     if (s.fullyCharged) return ["Fully charged", "Running on the charger"];
@@ -259,7 +270,15 @@
     return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
-  // Both power switches stay exactly as set; nothing turns them back on.
+  let latest = null;
+
+  // Each switch below Normal is a change from how a Mac normally behaves,
+  // so Normal is on exactly when all of them are off.
+  function isNormal(s) {
+    return !s.adapterDisabled && !s.chargingInhibited && !s.stayAwake && !s.lidSleepPrevented;
+  }
+
+  // Both power switches stay exactly as set; nothing turns them back off.
   function setSwitch(id, checked, unsupported, hint) {
     $(id).checked = checked;
     $(id).disabled = unsupported;
@@ -267,6 +286,7 @@
   }
 
   function render(data) {
+    latest = data;
     const s = data.state;
     $("login").hidden = true;
     $("app").hidden = false;
@@ -281,12 +301,19 @@
     $("power-title").textContent = title;
     $("power-detail").textContent = detail;
 
-    setSwitch("adapter", !s.adapterDisabled, s.adapterDisabled === null,
-      "Off runs the Mac on battery while plugged in");
-    setSwitch("charging", !s.chargingInhibited, s.chargingInhibited === null,
-      "Off stops the battery filling up");
+    const normal = isNormal(s);
+    $("normal").checked = normal;
+    $("normal-hint").textContent = normal
+      ? "Charging, power and sleep work the way macOS decides"
+      : "Turn on to switch everything below off";
+    setSwitch("adapter", Boolean(s.adapterDisabled), s.adapterDisabled === null,
+      "Run on battery even while plugged in");
+    setSwitch("charging", Boolean(s.chargingInhibited), s.chargingInhibited === null,
+      "Run on the charger, but stop filling the battery");
     $("stay-awake").checked = s.stayAwake;
+    $("stay-awake").disabled = false;
     $("lid").checked = s.lidSleepPrevented;
+    $("lid").disabled = false;
 
     const list = $("events");
     list.replaceChildren(...data.events.map((e) => {
@@ -318,15 +345,37 @@
         render(await api(path, toBody(input.checked)));
         showError("");
       } catch (error) {
-        input.checked = !input.checked;
         showError(error.message);
+        if (latest) render(latest);
+        else input.checked = !input.checked;
       } finally {
-        input.disabled = false;
+        if (!latest) input.disabled = false;
       }
     });
   }
-  bindSwitch("adapter", "/api/adapter", (on) => ({ enabled: on }));
-  bindSwitch("charging", "/api/charging", (on) => ({ enabled: on }));
+
+  // Normal is reached by turning it on; turning it off on its own would mean
+  // nothing, so that just snaps it back.
+  $("normal").addEventListener("change", async (event) => {
+    const input = event.target;
+    if (!input.checked) {
+      input.checked = true;
+      return;
+    }
+    input.disabled = true;
+    try {
+      render(await api("/api/normal", {}));
+      showError("");
+    } catch (error) {
+      showError(error.message);
+      if (latest) render(latest);
+    } finally {
+      input.disabled = false;
+    }
+  });
+
+  bindSwitch("adapter", "/api/adapter", (on) => ({ enabled: !on }));
+  bindSwitch("charging", "/api/charging", (on) => ({ enabled: !on }));
   bindSwitch("stay-awake", "/api/stay-awake", (on) => ({ enabled: on }));
   bindSwitch("lid", "/api/lid-sleep", (on) => ({ prevent: on }));
 

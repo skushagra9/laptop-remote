@@ -162,22 +162,8 @@ static int write_charging_key(Backend b, int enable) {
   return -1;
 }
 
-// The firmware leaves the MagSafe LED amber ("charging") when charging is
-// inhibited through the SMC, so set it green while paused and hand it back
-// to the system (0x00) on resume. Macs without MagSafe have no ACLC key.
-#define ACLC_SYSTEM 0x00
-#define ACLC_GREEN 0x03
-
-static void sync_magsafe_led(int enable) {
-  if (!key_exists("ACLC")) return;
-  unsigned char v = enable ? ACLC_SYSTEM : ACLC_GREEN;
-  smc_write("ACLC", &v, 1);
-}
-
 static int set_charging(Backend b, int enable) {
-  if (write_charging_key(b, enable) != 0) return -1;
-  sync_magsafe_led(enable);
-  return 0;
+  return write_charging_key(b, enable);
 }
 
 // Disconnecting the adapter makes the Mac run from its battery while the
@@ -203,6 +189,21 @@ static int set_adapter(int enable) {
   if (!key) return -1;
   unsigned char v = enable ? 0x00 : (strcmp(key, "CHIE") == 0 ? 0x08 : 0x01);
   return smc_write(key, &v, 1);
+}
+
+// The firmware keeps the MagSafe LED amber ("charging") whenever charging is
+// merely allowed, even while it is inhibited or the adapter is disconnected
+// through the SMC. Show green while either switch holds power back, and hand
+// the LED back to the system (0x00) otherwise. Macs without MagSafe have no
+// ACLC key.
+#define ACLC_SYSTEM 0x00
+#define ACLC_GREEN 0x03
+
+static void sync_magsafe_led(Backend b) {
+  if (!key_exists("ACLC")) return;
+  int held_back = charging_inhibited(b) == 1 || adapter_disabled() == 1;
+  unsigned char v = held_back ? ACLC_GREEN : ACLC_SYSTEM;
+  smc_write("ACLC", &v, 1);
 }
 
 static const char *json_bool(int value) {
@@ -279,6 +280,9 @@ int main(int argc, char **argv) {
   } else {
     rc = usage();
   }
+
+  // Any power change can flip whether power is being held back.
+  if (rc == 0 && strcmp(argv[1], "status") != 0) sync_magsafe_led(b);
 
   IOServiceClose(conn);
   return rc;

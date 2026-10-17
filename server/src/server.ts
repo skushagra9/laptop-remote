@@ -15,6 +15,9 @@ import {
 } from "./system.ts";
 
 const POLL_MS = 30_000;
+// After charger power is restored the Mac takes a minute or two to
+// renegotiate with the charger, and reports "no adapter" meanwhile.
+const RECONNECT_GRACE_MS = 4 * 60_000;
 const MAX_EVENTS = 30;
 
 class BadRequest extends Error {}
@@ -23,6 +26,7 @@ const config = loadConfig();
 const computerName = await readComputerName().catch(() => hostname());
 const stayAwake = new StayAwake();
 const events: { at: string; message: string }[] = [];
+let adapterRestoredAt = 0;
 
 const PUBLIC_DIR = join(import.meta.dirname, "..", "public");
 const STATIC_FILES: Record<string, { file: string; type: string }> = {
@@ -71,7 +75,15 @@ function requireBoolean(body: Record<string, unknown>, key: string): boolean {
 
 async function status() {
   const state = await readMacState(stayAwake);
-  return { host: computerName, state, events };
+  const chargerReconnecting =
+    !state.pluggedIn && !state.adapterDisabled && Date.now() - adapterRestoredAt < RECONNECT_GRACE_MS;
+  return { host: computerName, state: { ...state, chargerReconnecting }, events };
+}
+
+async function setAdapterTracked(enabled: boolean): Promise<void> {
+  const wasDisabled = enabled && (await readMacState(stayAwake)).adapterDisabled;
+  await setAdapter(enabled);
+  if (wasDisabled) adapterRestoredAt = Date.now();
 }
 
 async function enforceSafety(): Promise<void> {
@@ -90,7 +102,7 @@ const actions: Record<string, (body: Record<string, unknown>) => Promise<void>> 
   },
   "/api/adapter": async (body) => {
     const enabled = requireBoolean(body, "enabled");
-    await setAdapter(enabled);
+    await setAdapterTracked(enabled);
     log(enabled ? "Charger power turned on" : "Charger power cut, running on battery");
   },
   "/api/stay-awake": async (body) => {
@@ -102,6 +114,13 @@ const actions: Record<string, (body: Record<string, unknown>) => Promise<void>> 
     const prevent = requireBoolean(body, "prevent");
     await setLidSleepPrevented(prevent);
     log(prevent ? "Awake with lid closed turned on" : "Awake with lid closed turned off");
+  },
+  "/api/normal": async () => {
+    await setAdapterTracked(true);
+    await setCharging(true);
+    stayAwake.set(false);
+    await setLidSleepPrevented(false);
+    log("Back to normal Mac behavior");
   },
 };
 

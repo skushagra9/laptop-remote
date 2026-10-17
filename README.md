@@ -4,7 +4,9 @@ Control your Mac's charging and sleep from your phone, from anywhere.
 
 Leave the laptop plugged in at home, then from your phone:
 
+- **Normal Mac behavior.** One switch that turns everything below off and hands control back to macOS.
 - **Cut charger power.** The Mac runs on its battery even though the charger is plugged in.
+  After power is restored the Mac takes a minute or two to reconnect to the charger.
 - **Pause or resume charging.** With charging paused the Mac keeps running from the charger, and the battery just stops filling up.
 - **Keep it awake** so your Claude Code Remote Control sessions (or anything else) stay reachable.
 - **Keep it awake with the lid closed.**
@@ -22,7 +24,7 @@ phone (web app) --HTTPS--> tailscale serve --> server (127.0.0.1:7777) --sudo-->
 - `helper/laptop-remote-helper.c` is the only code that runs as root.
   It accepts a fixed list of commands (`status`, `charging on|off`, `adapter on|off`, `lid-sleep allow|prevent`) and never an arbitrary SMC key or value.
   It switches charging with the `CHTE` SMC key (`CH0B`/`CH0C` on older firmware) and charger power with `CHIE` (`CH0I` on older firmware).
-  While charging is paused it also turns the MagSafe light green through `ACLC`, because the firmware leaves it amber.
+  While either switch holds power back it turns the MagSafe light green through `ACLC`, because the firmware leaves it amber; otherwise macOS controls the light.
 - `server/` is a dependency-free Node.js server that serves the phone UI and a small JSON API protected by a token.
   It only listens on `127.0.0.1`, so it is reachable only through Tailscale.
 - `install.sh` installs the helper with a sudo rule scoped to it, starts the server at login with launchd, and exposes it with `tailscale serve`.
