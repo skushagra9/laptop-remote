@@ -36,7 +36,8 @@ phone (web app) --HTTPS--> tailscale serve --> server (127.0.0.1:7777) --sudo-->
 
 You need macOS on Apple Silicon, Node.js 24 or newer, and the Xcode command line tools (`xcode-select --install`).
 
-1. Install Tailscale on the Mac (`brew install --cask tailscale`) and on your phone, and sign both in to the same account.
+1. Install Tailscale on the Mac (`brew install --cask tailscale-app`) and on your phone, and sign both in to the same account.
+   On the Mac, approve its network extension in System Settings > General > Login Items & Extensions.
 2. In a Terminal, run `./install.sh`.
    It asks for your password once, then prints a link.
 3. Open the link on your phone and use **Share > Add to Home Screen**.

@@ -76,11 +76,15 @@ for candidate in tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale;
   if command -v "$candidate" >/dev/null 2>&1; then TAILSCALE="$candidate"; break; fi
 done
 
+# The Tailscale CLI blocks indefinitely while its network extension awaits
+# approval or the app is signed out, so every call gets a deadline.
+ts() { perl -e 'alarm shift; exec @ARGV' 20 "$TAILSCALE" "$@"; }
+
 echo
-if [[ -n "$TAILSCALE" ]] && "$TAILSCALE" status >/dev/null 2>&1; then
+if [[ -n "$TAILSCALE" ]] && ts status >/dev/null 2>&1; then
   echo "==> Exposing it to your devices with Tailscale (HTTPS, private to your tailnet)"
-  "$TAILSCALE" serve --bg "$PORT" >/dev/null
-  HOST="$("$TAILSCALE" status --json | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).Self.DNSName.replace(/\.$/,"")))')"
+  ts serve --bg "$PORT" >/dev/null
+  HOST="$(ts status --json | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).Self.DNSName.replace(/\.$/,"")))')"
   echo
   echo "Done. Open this on your phone (it is signed in to the same Tailscale account):"
   echo
@@ -91,6 +95,7 @@ else
   echo "Done. The server is running on http://127.0.0.1:$PORT"
   echo
   echo "To reach it from your phone:"
-  echo "  1. Install Tailscale on this Mac (brew install --cask tailscale) and on your phone, same account."
+  echo "  1. Install Tailscale on this Mac (brew install --cask tailscale-app) and on your phone, same account."
+  echo "     On the Mac, approve its network extension in System Settings > General > Login Items & Extensions."
   echo "  2. Run ./install.sh again. It prints the link to open on your phone."
 fi
