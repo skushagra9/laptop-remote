@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Laptop Remote</title>
+<meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Laptop">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --card: #ffffff;
+    --text: #15171c;
+    --muted: #6b7280;
+    --line: #e5e7eb;
+    --accent: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --track: #d1d5db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115;
+      --card: #181b21;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+      --line: #262a33;
+      --accent: #22c55e;
+      --warn: #f59e0b;
+      --danger: #f87171;
+      --track: #374151;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  main {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+  }
+  header { margin-bottom: 16px; }
+  h1 { font-size: 22px; margin: 0; }
+  .host { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .battery { display: flex; align-items: center; gap: 16px; }
+  .gauge { position: relative; width: 84px; height: 84px; flex: none; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .pct {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .battery-text strong { display: block; font-size: 18px; }
+  .battery-text span { color: var(--muted); font-size: 14px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row strong { display: block; font-weight: 600; }
+  .row span { color: var(--muted); font-size: 14px; }
+  .switch { position: relative; width: 52px; height: 32px; flex: none; }
+  .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 999px; background: var(--track);
+    transition: background .15s;
+  }
+  .switch .track::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    transition: transform .15s;
+  }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(20px); }
+  .switch input:disabled + .track { opacity: .5; }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .link {
+    display: block; text-align: center; padding: 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--line);
+    color: var(--text); text-decoration: none; font-weight: 600; margin-bottom: 12px;
+  }
+  h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 20px 4px 8px; text-transform: uppercase; letter-spacing: .04em; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 8px 0; font-size: 14px; }
+  li + li { border-top: 1px solid var(--line); }
+  li time { color: var(--muted); margin-right: 8px; font-variant-numeric: tabular-nums; }
+  /* Pinned to the bottom so an error is visible next to whichever switch was tapped. */
+  .toast {
+    position: fixed; left: 16px; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom));
+    max-width: 448px; margin: 0 auto;
+    border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 500;
+    background: #b91c1c; color: #fff; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    display: none;
+  }
+  .toast.show { display: block; }
+  .empty { color: var(--muted); font-size: 14px; }
+  form { display: grid; gap: 8px; }
+  input[type=password] {
+    font: inherit; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); width: 100%;
+  }
+  button {
+    font: inherit; font-weight: 600; padding: 12px; border-radius: 10px; border: 0;
+    background: var(--accent); color: #fff; cursor: pointer;
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Laptop Remote</h1>
+    <span class="host" id="host"></span>
+  </header>
+
+  <section class="card" id="login" hidden>
+    <form id="login-form">
+      <label for="token"><strong>Access token</strong></label>
+      <input id="token" type="password" autocomplete="current-password" placeholder="Paste the token from your laptop">
+      <button type="submit">Connect</button>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <section class="card battery">
+      <div class="gauge">
+        <svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">
+          <circle cx="42" cy="42" r="36" fill="none" stroke="var(--track)" stroke-width="8"/>
+          <circle id="gauge-fill" cx="42" cy="42" r="36" fill="none" stroke="var(--accent)" stroke-width="8"
+                  stroke-linecap="round" stroke-dasharray="226.2" stroke-dashoffset="226.2"/>
+        </svg>
+        <div class="pct" id="pct">-</div>
+      </div>
+      <div class="battery-text">
+        <strong id="power-title">-</strong>
+        <span id="power-detail"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div>
+          <strong>Charging</strong>
+          <span id="charging-hint">Allow the battery to charge</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="charging" aria-label="Charging"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div>
+          <strong>Stay awake</strong>
+          <span>Keep the Mac from sleeping when idle</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="stay-awake" aria-label="Stay awake"><span class="track"></span></label>
+      </div>
+      <div class="row">
+        <div>
+          <strong>Awake with lid closed</strong>
+          <span>Turns off by itself if you unplug</span>
+        </div>
+        <label class="switch"><input type="checkbox" id="lid" aria-label="Awake with lid closed"><span class="track"></span></label>
+      </div>
+    </section>
+
+    <a class="link" href="https://claude.ai/code" target="_blank" rel="noopener">Open Claude sessions</a>
+
+    <h2>Activity</h2>
+    <section class="card">
+      <ul id="events"></ul>
+      <p class="empty" id="no-events">Nothing yet.</p>
+    </section>
+  </div>
+</main>
+<div class="toast" id="error" role="alert"></div>
+
+<script>
+  const TOKEN_KEY = "laptop-remote-token";
+  const $ = (id) => document.getElementById(id);
+
+  function readStoredToken() {
+    try { return localStorage.getItem(TOKEN_KEY); } catch { return null; }
+  }
+  function storeToken(value) {
+    try { value ? localStorage.setItem(TOKEN_KEY, value) : localStorage.removeItem(TOKEN_KEY); } catch {}
+  }
+
+  // The install script prints a link with the token in the fragment, which
+  // never reaches the server. Save it and drop it from the address bar.
+  const fromHash = new URLSearchParams(location.hash.slice(1)).get("token");
+  if (fromHash) {
+    storeToken(fromHash);
+    history.replaceState(null, "", location.pathname);
+  }
+  let token = fromHash || readStoredToken();
+
+  function showError(message) {
+    $("error").textContent = message || "";
+    $("error").classList.toggle("show", Boolean(message));
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers: { authorization: `Bearer ${token}`, ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) {
+      token = null;
+      storeToken(null);
+      showLogin();
+      throw new Error("That token was not accepted.");
+    }
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
+  function showLogin() {
+    $("login").hidden = false;
+    $("app").hidden = true;
+  }
+
+  function describePower(s) {
+    if (!s.pluggedIn) return ["On battery", "Charger not connected"];
+    if (s.chargingInhibited) return ["Charging paused", "Running on the charger, battery is not charging"];
+    if (s.fullyCharged) return ["Fully charged", "Running on the charger"];
+    if (s.charging) return ["Charging", "Plugged in"];
+    return ["Plugged in", "Not charging right now"];
+  }
+
+  function formatTime(iso) {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function render(data) {
+    const s = data.state;
+    $("login").hidden = true;
+    $("app").hidden = false;
+    $("host").textContent = data.host;
+    $("pct").textContent = `${s.percent}%`;
+    const fill = $("gauge-fill");
+    fill.style.strokeDashoffset = String(226.2 * (1 - s.percent / 100));
+    fill.style.stroke = s.percent <= data.floorPercent ? "var(--danger)" : s.chargingInhibited ? "var(--warn)" : "var(--accent)";
+
+    const [title, detail] = describePower(s);
+    $("power-title").textContent = title;
+    $("power-detail").textContent = detail;
+
+    const unsupported = s.chargingInhibited === null;
+    $("charging").checked = !s.chargingInhibited;
+    $("charging").disabled = unsupported;
+    $("charging-hint").textContent = unsupported
+      ? "This Mac does not expose a charging switch"
+      : `Turns back on by itself at ${data.floorPercent}%`;
+    $("stay-awake").checked = s.stayAwake;
+    $("lid").checked = s.lidSleepPrevented;
+
+    const list = $("events");
+    list.replaceChildren(...data.events.map((e) => {
+      const li = document.createElement("li");
+      const time = document.createElement("time");
+      time.dateTime = e.at;
+      time.textContent = formatTime(e.at);
+      li.append(time, e.message);
+      return li;
+    }));
+    $("no-events").hidden = data.events.length > 0;
+  }
+
+  async function refresh() {
+    if (!token) return showLogin();
+    try {
+      render(await api("/api/status"));
+      showError("");
+    } catch (error) {
+      showError(error.message === "Failed to fetch" ? "Can't reach the laptop. Is it awake and online?" : error.message);
+    }
+  }
+
+  function bindSwitch(id, path, toBody) {
+    $(id).addEventListener("change", async (event) => {
+      const input = event.target;
+      input.disabled = true;
+      try {
+        render(await api(path, toBody(input.checked)));
+        showError("");
+      } catch (error) {
+        input.checked = !input.checked;
+        showError(error.message);
+      } finally {
+        input.disabled = false;
+      }
+    });
+  }
+  bindSwitch("charging", "/api/charging", (on) => ({ enabled: on }));
+  bindSwitch("stay-awake", "/api/stay-awake", (on) => ({ enabled: on }));
+  bindSwitch("lid", "/api/lid-sleep", (on) => ({ prevent: on }));
+
+  $("login-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    token = $("token").value.trim();
+    storeToken(token);
+    refresh();
+  });
+
+  refresh();
+  setInterval(() => { if (document.visibilityState === "visible") refresh(); }, 10000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refresh(); });
+</script>
+</body>
+</html>

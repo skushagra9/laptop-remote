@@ -1,0 +1,22 @@
+{
+  "name": "laptop-remote",
+  "version": "0.1.0",
+  "description": "Control your Mac's charging and sleep from your phone, from anywhere.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server/src/server.ts",
+    "dev": "LAPTOP_REMOTE_HELPER=build/laptop-remote-helper node --watch server/src/server.ts",
+    "build:helper": "mkdir -p build && clang -O2 -Wall -Wextra -framework IOKit -o build/laptop-remote-helper helper/laptop-remote-helper.c",
+    "test": "node --test 'server/test/*.test.ts'",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
